@@ -96,18 +96,19 @@ class ClinicalDataProcessor extends DataProcessor {
                                         [(it.DATA_LABEL) : it.COLUMN]
                                     }
 
-                                    boolean hasEmptyTags = false;
+                                    boolean hasEmptyTags = false
                                     cat_cd = cat_cd.replaceAll(/\$\$([A-z0-9_\"\s\(\)]+)/) { match, name ->
-                                        if (!cols[groups[name]]) {
+                                        def tagValue = cols[groups[name]] as String
+                                        if (!tagValue) {
                                             hasEmptyTags = true
                                             return
                                         }
-                                        '$$' + cols[groups[name]].replaceAll(RE_PLUS, '(plus)')
+                                        '$$' + tagValue.replaceAll(RE_PLUS, '(plus)')
                                     }
 
                                     //ignore record without tags value
                                     if (hasEmptyTags)
-                                        return;
+                                        return
                                 }
                                 //Support tag stop
 

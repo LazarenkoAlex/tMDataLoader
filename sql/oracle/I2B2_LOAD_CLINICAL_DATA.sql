@@ -407,6 +407,14 @@ BEGIN
     cz_write_audit(jobId,databaseName,procedureName,'Use single visit_name in path',0,stepCt,'Done');
   end if;
   commit;
+
+	UPDATE wrk_clinical_data tmp
+	SET category_cd = replace(tmp.category_cd, '$$', '')
+	WHERE tmp.category_cd LIKE '%$$%';
+
+	stepCt := stepCt + 1;
+	cz_write_audit(jobId,databaseName,procedureName,'Remove tag markers',SQL%ROWCOUNT,stepCt,'Done');
+	COMMIT;
 	
 	--	set data_label to null when it duplicates the last part of the category_path
 	--	Remove data_label from last part of category_path when they are the same
@@ -518,6 +526,24 @@ BEGIN
 
 	commit;
 
+	-- set visit_name and data_label to null if it is not in path. Avoids duplicates for wt_trial_nodes
+	-- we should clear these field before detecting data type
+	update wrk_clinical_data t
+	set visit_name=null
+	where category_path like '%\$' and category_path not like '%VISITNAME%';
+
+	stepCt := stepCt + 1;
+	cz_write_audit(jobId,databaseName,procedureName,'Set visit_name to null if VISITNAME not in category_path',SQL%ROWCOUNT,stepCt,'Done');
+	commit;
+
+	update wrk_clinical_data t
+	set data_label=null
+	where category_path like '%\$' and category_path not like '%DATALABEL%';
+
+	stepCt := stepCt + 1;
+	cz_write_audit(jobId,databaseName,procedureName,'Set data_label to null if DATALABEL not in category_path',SQL%ROWCOUNT,stepCt,'Done');
+	commit;
+
 -- determine numeric data types
 
 	execute immediate('truncate table "&TM_WZ_SCHEMA".wt_num_data_types');
@@ -587,26 +613,6 @@ BEGIN
 
 	stepCt := stepCt + 1;
 	cz_write_audit(jobId,databaseName,procedureName,'Add if missing DATALABEL, VISITNAME and DATAVALUE to category_path',SQL%ROWCOUNT,stepCt,'Done');
-
-	commit;
-
-	-- set visit_name and data_label to null if it is not in path. Avoids duplicates for wt_trial_nodes
-	update wrk_clinical_data t
-	set visit_name=null
-	where category_path not like '%VISITNAME%';
-
-	stepCt := stepCt + 1;
-	cz_write_audit(jobId,databaseName,procedureName,'Set visit_name to null if VISITNAME not in category_path',SQL%ROWCOUNT,stepCt,'Done');
-
-	commit;
-
-	update wrk_clinical_data t
-	set data_label=null
-	where category_path not like '%DATALABEL%';
-
-	stepCt := stepCt + 1;
-	cz_write_audit(jobId,databaseName,procedureName,'Set data_label to null if DATALABEL not in category_path',SQL%ROWCOUNT,stepCt,'Done');
-
 	commit;
 
 	-- Remove duplicates
@@ -618,7 +624,6 @@ BEGIN
 				partition by subject_id, visit_name, data_label, category_cd, data_value order by rowid
 			) rn
 			from wrk_clinical_data
-			where data_type = 'T'
  		) where rn <> 1
  	);
 

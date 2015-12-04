@@ -410,6 +410,14 @@ BEGIN
 	--	set data_label to null when it duplicates the last part of the category_path
 	--	Remove data_label from last part of category_path when they are the same
 
+	UPDATE wrk_clinical_data tmp
+	SET category_cd = replace(tmp.category_cd, '$$', '')
+	WHERE tmp.category_cd LIKE '%$$%';
+
+	stepCt := stepCt + 1;
+	get diagnostics rowCt := ROW_COUNT;
+	perform cz_write_audit(jobId,databaseName,procedureName,'Remove tag markers',rowCt,stepCt,'Done');
+
 	begin
 	update wrk_clinical_data tpm
 	--set data_label = null
@@ -551,6 +559,24 @@ BEGIN
 	stepCt := stepCt + 1;
 	select cz_write_audit(jobId,databaseName,procedureName,'Remove leading, trailing, double spaces',rowCt,stepCt,'Done') into rtnCd;
 
+	-- set visit_name and data_label to NULL if not found in category_path. Avoids duplicates for wt_trial_nodes
+	-- we should clear visit_name and data_label before filling wt_num_data_types
+	update wrk_clinical_data t
+	set visit_name=null
+	where category_path like '%\$' and category_path not like '%VISITNAME%';
+
+	get diagnostics rowCt := ROW_COUNT;
+	stepCt := stepCt + 1;
+	perform cz_write_audit(jobId,databaseName,procedureName,'Set visit_name to null if VISITNAME not in category_path',rowCt,stepCt,'Done');
+
+	update wrk_clinical_data t
+	set data_label=null
+	where category_path like '%\$' and category_path not like '%DATALABEL%';
+
+	get diagnostics rowCt := ROW_COUNT;
+	stepCt := stepCt + 1;
+	perform cz_write_audit(jobId,databaseName,procedureName,'Set data_label to null if DATALABEL not in category_path',rowCt,stepCt,'Done');
+
 	--1. DETERMINE THE DATA_TYPES OF THE FIELDS
 	--	replaced cursor with update, used temp table to store category_cd/data_label because correlated subquery ran too long
 
@@ -642,31 +668,11 @@ BEGIN
 	stepCt := stepCt + 1;
 	select cz_write_audit(jobId,databaseName,procedureName,'Add if missing DATALABEL, VISITNAME and DATAVALUE to category_path',rowCt,stepCt,'Done') into rtnCd;
 
-	-- set visit_name and data_label to NULL if not found in category_path. Avoids duplicates for wt_trial_nodes
-	update wrk_clinical_data t
-	set visit_name=null
-	where category_path not like '%VISITNAME%';
-
-	get diagnostics rowCt := ROW_COUNT;
-
-	stepCt := stepCt + 1;
-	perform cz_write_audit(jobId,databaseName,procedureName,'Set visit_name to null if VISITNAME not in category_path',rowCt,stepCt,'Done');
-
-	update wrk_clinical_data t
-	set data_label=null
-	where category_path not like '%DATALABEL%';
-
-	get diagnostics rowCt := ROW_COUNT;
-
-	stepCt := stepCt + 1;
-	perform cz_write_audit(jobId,databaseName,procedureName,'Set data_label to null if DATALABEL not in category_path',rowCt,stepCt,'Done');
-
 	WITH duplicates AS (
 		DELETE FROM wrk_clinical_data
 		WHERE (subject_id, coalesce(visit_name, '**NULL**'), coalesce(data_label, '**NULL**'), category_cd, data_value) in (
 			SELECT subject_id, coalesce(visit_name, '**NULL**'), coalesce(data_label, '**NULL**'), category_cd, data_value
 			FROM wrk_clinical_data
-			WHERE data_type = 'T'
 			GROUP BY subject_id, visit_name, data_label, category_cd, data_value
 			HAVING count(*) > 1)
 		RETURNING *
