@@ -60,6 +60,15 @@ BEGIN
              where c_fullname like escaped_path || '%' escape '*'
         ) foo where length(txt_path) > 0;
 
+    select count(*) into v_count
+      from tmp_i2b2_paths;
+
+    IF (v_count = 0) THEN
+      step := step + 1;
+      PERFORM cz_write_audit(job_id, user_name, function_name,'Correct path not find in table i2b2', 0, step,'Done');
+      RETURN 1;
+    END IF;
+
     select max(array_length(node_path, 1)) into max_path_len from tmp_i2b2_paths;
     FOR path_len IN 2 .. max_path_len LOOP
         FOR dir_path, node_name IN
